@@ -1,0 +1,104 @@
+name: Build without FFmpeg
+
+# Builds opencv-python (no contrib, with GUI) with -DWITH_FFMPEG=OFF for the
+# platforms CATS ships on. Nothing is published: wheels stay as run artifacts.
+
+on:
+  push:
+    branches:
+      - opencv-5-no-ffmpeg
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      SDIST: 0
+      ENABLE_HEADLESS: 0
+      ENABLE_CONTRIB: 0
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        submodules: false
+        fetch-depth: 0
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        architecture: x64
+    - name: Setup MSBuild.exe
+      uses: microsoft/setup-msbuild@v1.1
+    - name: Setup NASM
+      uses: ilammy/setup-nasm@v1
+    - name: Build a package
+      run: |
+        python --version
+        python -m pip install --upgrade pip
+        python -m pip install --upgrade setuptools
+        python -m pip install cmake==4.3.2
+        python -m pip install toml && python -c "import toml; c = toml.load('pyproject.toml'); print('\n'.join(c['build-system']['requires']))" >> requirements.txt | python -m pip install -r requirements.txt
+        set "CI_BUILD=1" && python setup.py bdist_wheel --py-limited-api=cp37 --dist-dir=%cd%\wheelhouse -v
+      shell: cmd
+    - name: Save wheel
+      uses: actions/upload-artifact@v7
+      with:
+        name: wheel-windows-x64-no-ffmpeg
+        path: wheelhouse/opencv*
+        if-no-files-found: error
+    - name: Set up Python 3.13 for verification
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+        architecture: x64
+    - name: Verify wheel
+      shell: bash
+      run: python -I .github/verify_no_ffmpeg.py wheelhouse
+
+  linux-x86_64:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      REPO_DIR: .
+      PROJECT_SPEC: opencv-python
+      MB_PYTHON_VERSION: '3.9'
+      TRAVIS_PYTHON_VERSION: '3.9'
+      MB_ML_VER: 2_28
+      TRAVIS_BUILD_DIR: ${{ github.workspace }}
+      CONFIG_PATH: travis_config.sh
+      DOCKER_IMAGE: quay.io/opencv-ci/opencv-python-manylinux_2_28-x86-64:20260531
+      USE_CCACHE: 0
+      UNICODE_WIDTH: 32
+      PLAT: x86_64
+      SDIST: 0
+      ENABLE_HEADLESS: 0
+      ENABLE_CONTRIB: 0
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        submodules: false
+        fetch-depth: 0
+    - name: Build a package
+      run: source scripts/build.sh
+    - name: Save wheel
+      uses: actions/upload-artifact@v7
+      with:
+        name: wheel-linux-x86_64-no-ffmpeg
+        path: wheelhouse/opencv*.whl
+        if-no-files-found: error
+    - name: Set up Python 3.13 for verification
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+    - name: Install system libraries needed to import cv2
+      run: sudo apt-get update && sudo apt-get install -y libgl1 libglib2.0-0
+    - name: Verify wheel
+      run: python -I .github/verify_no_ffmpeg.py wheelhouse
