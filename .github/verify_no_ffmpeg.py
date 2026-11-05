@@ -36,8 +36,10 @@ import cv2
 
 print("cv2", cv2.__version__, os.path.dirname(cv2.__file__))
 info = cv2.getBuildInformation()
-print([line.strip() for line in info.splitlines() if "FFMPEG" in line])
-assert re.search(r"FFMPEG:\s+NO", info), "OpenCV reports FFMPEG enabled"
+# OpenCV omits the FFMPEG line from its build information when FFmpeg is off.
+assert not re.search(r"FFMPEG:\s+YES", info), "OpenCV reports FFMPEG enabled"
+assert not cv2.videoio_registry.hasBackend(cv2.CAP_FFMPEG), "FFmpeg video backend present"
+print("FFmpeg is absent from the build and the video backends")
 
 image = np.zeros((480, 640, 3), np.uint8)
 cv2.rectangle(image, (0, 0), (100, 100), (255, 255, 255), -1)
@@ -50,7 +52,7 @@ assert cv2.imread("t.jpg").shape == image.shape
 
 cv2.findChessboardCorners(gray, (7, 6), cv2.CALIB_CB_ADAPTIVE_THRESH)
 assert hasattr(cv2, "fisheye") and hasattr(cv2.fisheye, "calibrate")
-assert hasattr(cv2, "aruco") and hasattr(cv2.aruco, "getPredefinedDictionary")
+assert cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50).bytesList.shape[0] == 50
 print("image, calibration and aruco APIs OK")
 """
 
